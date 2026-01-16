@@ -14,6 +14,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Collections;
 
 /**
  * TODO
@@ -36,50 +37,87 @@ public class CustomerModel {
 
     //SELECT productID, description, image, unitPrice,inStock quantity
     void search() throws SQLException {
-        String productId = cusView.tfId.getText().trim();
-        if(!productId.isEmpty()){
-            theProduct = databaseRW.searchByProductId(productId); //search database
-            if(theProduct != null && theProduct.getStockQuantity()>0){
-                double unitPrice = theProduct.getUnitPrice();
-                String description = theProduct.getProductDescription();
-                int stock = theProduct.getStockQuantity();
+    String productId = cusView.tfId.getText().trim();
+    String productName = cusView.tfName.getText().trim();
 
-                String baseInfo = String.format("Product_Id: %s\n%s,\nPrice: £%.2f", productId, description, unitPrice);
-                String quantityInfo = stock < 100 ? String.format("\n%d units left.", stock) : "";
-                displayLaSearchResult = baseInfo + quantityInfo;
-                System.out.println(displayLaSearchResult);
-            }
-            else{
-                theProduct=null;
-                displayLaSearchResult = "No Product was found with ID " + productId;
-                System.out.println("No Product was found with ID " + productId);
-            }
-        }else{
-            theProduct=null;
-            displayLaSearchResult = "Please type ProductID";
-            System.out.println("Please type ProductID.");
-        }
+    // Require at least one input
+    if (productId.isEmpty() && productName.isEmpty()) {
+        theProduct = null;
+        displayLaSearchResult = "Please enter a Product ID or Product Name.";
         updateView();
+        return;
     }
+
+    // Search by ID (single product)
+    if (!productId.isEmpty()) {
+        theProduct = databaseRW.searchByProductId(productId);
+
+        if (theProduct != null && theProduct.getStockQuantity() > 0) {
+            displayLaSearchResult =
+                    "Product_Id: " + theProduct.getProductId() + "\n" +
+                    theProduct.getProductDescription() + ",\n" +
+                    "Price: £" + String.format("%.2f", theProduct.getUnitPrice());
+        } else {
+            theProduct = null;
+            displayLaSearchResult = "No product found with ID " + productId;
+        }
+
+        updateView();
+        return;
+    }
+
+    // Search by name/keyword (multiple results possible)
+    ArrayList<Product> results = databaseRW.searchProduct(productName);
+
+    theProduct = null; // keyword search doesn't select one product automatically
+
+    if (results == null || results.isEmpty()) {
+        displayLaSearchResult = "No products found for \"" + productName + "\"";
+    } else {
+        String resultText = "Search results:\n";
+        for (Product p : results) {
+            resultText += p.getProductId() + " - " + p.getProductDescription() + "\n";
+        }
+        displayLaSearchResult = resultText;
+    }
+
+    updateView();
+}
+
+
+
 
     void addToTrolley(){
-        if(theProduct!= null){
+    if(theProduct != null){
 
-            // trolley.add(theProduct) — Product is appended to the end of the trolley.
-            // To keep the trolley organized, add code here or call a method that:
-            //TODO
-            // 1. Merges items with the same product ID (combining their quantities).
-            // 2. Sorts the products in the trolley by product ID.
+        boolean merged = false;
+
+        for (Product p : trolley) {
+            if (p.getProductId().equals(theProduct.getProductId())) {
+                p.setOrderedQuantity(p.getOrderedQuantity() + theProduct.getOrderedQuantity());
+                merged = true;
+                break;
+            }
+        }
+
+        if (!merged) {
             trolley.add(theProduct);
-            displayTaTrolley = ProductListFormatter.buildString(trolley); //build a String for trolley so that we can show it
         }
-        else{
-            displayLaSearchResult = "Please search for an available product before adding it to the trolley";
-            System.out.println("must search and get an available product before add to trolley");
-        }
-        displayTaReceipt=""; // Clear receipt to switch back to trolleyPage (receipt shows only when not empty)
-        updateView();
+
+        // Sorts the trolley by product ID
+        Collections.sort(trolley);
+
+        displayTaTrolley = ProductListFormatter.buildString(trolley);
     }
+    else{
+        displayLaSearchResult = "Please select an available product before placing it in the trolley";
+        System.out.println("must search and pick an available product before adding it to the trolley");
+    }
+
+    displayTaReceipt = ""; // switches back to the trolleys Page
+    updateView();
+}
+
 
     void checkOut() throws IOException, SQLException {
         if(!trolley.isEmpty()){
